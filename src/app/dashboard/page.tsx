@@ -6,7 +6,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import EmailList from '../components/EmailList';
 import EmailViewer from '../components/EmailViewer';
-import { EmailService, EmailItem, EmailContent } from '../../types/email';
+import { EmailService, EmailItem} from '../../types/email';
 import './dashboard.css';
 
 export default function Dashboard() {

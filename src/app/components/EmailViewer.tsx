@@ -10,6 +10,26 @@ interface EmailViewerProps {
   service?: 'gmail' | 'outlook';
 }
 
+// Define types for email sender information
+type EmailAddressObject = {
+  name?: string;
+  email: string;
+};
+
+type OutlookEmailAddress = {
+  name?: string;
+  emailAddress?: {
+    name?: string;
+    address?: string;
+  };
+};
+
+type EmailSender = 
+  | string 
+  | EmailAddressObject 
+  | EmailAddressObject[] 
+  | OutlookEmailAddress;
+
 export default function EmailViewer({ email, messageId, service }: EmailViewerProps) {
   const [isDownloading, setIsDownloading] = useState<{[key: string]: boolean}>({});
   const [loadedEmail, setLoadedEmail] = useState<EmailContent | null>(email);
@@ -185,7 +205,7 @@ export default function EmailViewer({ email, messageId, service }: EmailViewerPr
   };
 
   // Format the sender information to handle both string and object formats
-  const formatSender = (from: any): string => {
+  const formatSender = (from: EmailSender): string => {
     if (typeof from === 'string') {
       return from;
     } 
@@ -198,7 +218,16 @@ export default function EmailViewer({ email, messageId, service }: EmailViewerPr
     }
     
     if (from && typeof from === 'object') {
-      return from.name ? `${from.name} <${from.email}>` : from.email || 'Unknown';
+      // Handle Outlook format
+      if ('emailAddress' in from) {
+        return from.emailAddress?.name ? 
+          `${from.emailAddress.name} <${from.emailAddress.address}>` : 
+          from.emailAddress?.address || 'Unknown';
+      }
+      // Handle Gmail format
+      if ('email' in from) {
+        return from.name ? `${from.name} <${from.email}>` : from.email;
+      }
     }
     
     return 'Unknown';

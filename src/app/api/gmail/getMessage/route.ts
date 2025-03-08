@@ -3,7 +3,6 @@ import { google } from 'googleapis';
 import { cookies } from 'next/headers';
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } from '../../../../lib/googleAuth';
 import { decryptData } from '@/lib/encrypt';
-import { getGmailToken } from '@/lib/tokenStorage';
 import DOMPurify from 'isomorphic-dompurify';
 
 // Define types for Gmail message parts and payload
@@ -42,11 +41,7 @@ interface AttachmentWithMessageId {
   messageId: string;
 }
 
-// Define type for API errors
-interface ApiError extends Error {
-  status?: number;
-  message: string;
-}
+
 
 // Helper function to extract header values
 function getHeader(headers: { name?: string | null; value?: string | null }[], name: string): string {

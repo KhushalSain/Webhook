@@ -52,9 +52,14 @@ function createPrismaInstance(): PrismaClient {
   } catch (e) {
     console.error('Failed to initialize Prisma client:', e);
     
+    // Define a type that extends Promise for Prisma-specific promises
+    type PrismaPromiseType<T> = Promise<T> & {
+      [Symbol.toStringTag]: string;
+    };
+    
     // Create a properly typed mock Prisma client for fallback
     const createPrismaPromise = <T>(returnValue: T) => {
-      const promise = Promise.resolve(returnValue) as any;
+      const promise = Promise.resolve(returnValue) as PrismaPromiseType<T>;
       promise[Symbol.toStringTag] = "PrismaPromise";
       return promise;
     };
