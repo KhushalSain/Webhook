@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"  
+  url      = env("DATABASE_URL")
+}
+
+// Model to store Gmail OAuth tokens
+model GmailToken {
+  id           String   @id @default(uuid())
+  email        String   @unique  // Gmail account email
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  tokenType    String   @default("Bearer") @map("token_type")
+  scope        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("gmail_tokens")
+}

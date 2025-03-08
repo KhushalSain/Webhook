@@ -6,24 +6,35 @@ import { cookies } from 'next/headers';
 import { decryptData } from '@/lib/encrypt';
 
 // Helper function to extract header values
-function getHeader(headers: { name?: string | null; value?: string | null }[], name: string): string { // Updated type
+function getHeader(headers: { name?: string | null; value?: string | null }[], name: string): string {
   const header = headers.find(h => h.name?.toLowerCase() === name.toLowerCase());
   return header && header.value ? header.value : '';
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Get token from cookie instead of query parameter
-    const cookieStore = await cookies();
-    const tokenCookie = cookieStore.get('gmail_auth_token');
+    let tokens;
     
-    if (!tokenCookie) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // Check for Authorization header first (for internal API calls)
+    const authHeader = request.headers.get('Authorization');
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Use token directly from Authorization header
+      const accessToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+      tokens = { access_token: accessToken };
+    } else {
+      // Fall back to getting token from cookie (for browser requests)
+      const cookieStore = await cookies();
+      const tokenCookie = cookieStore.get('gmail_auth_token');
+      
+      if (!tokenCookie) {
+        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+      }
+      
+      // Decrypt the token from the cookie
+      const decryptedTokens = await decryptData(tokenCookie.value);
+      tokens = JSON.parse(decryptedTokens);
     }
-    
-    // Decrypt the token from the cookie
-    const decryptedTokens = await decryptData(tokenCookie.value);
-    const tokens = JSON.parse(decryptedTokens);
 
     const oauth2Client = new google.auth.OAuth2(
       GOOGLE_CLIENT_ID,
