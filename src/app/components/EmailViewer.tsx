@@ -1,16 +1,154 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EmailContent } from '@/types/email';
+import { emailCache } from '@/lib/emailCache';
 
 interface EmailViewerProps {
   email: EmailContent | null;
+  messageId?: string | null;
+  service?: 'gmail' | 'outlook';
 }
 
-export default function EmailViewer({ email }: EmailViewerProps) {
+export default function EmailViewer({ email, messageId, service }: EmailViewerProps) {
   const [isDownloading, setIsDownloading] = useState<{[key: string]: boolean}>({});
+  const [loadedEmail, setLoadedEmail] = useState<EmailContent | null>(email);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const previousMessageId = useRef<string | null | undefined>(null);
 
-  if (!email) {
+  // Only fetch a new email when messageId changes
+  useEffect(() => {
+    // Skip if no messageId is provided or it's the same as before or no service
+    if (!messageId || messageId === previousMessageId.current || !service) {
+      return;
+    }
+
+    previousMessageId.current = messageId;
+    
+    // Check if the email is in our cache
+    const cachedEmail = emailCache.get(messageId);
+    if (cachedEmail) {
+      setLoadedEmail(cachedEmail);
+      return;
+    }
+
+    // Check if we already have an in-flight request for this email
+    const existingPromise = emailCache.getFetchPromise(messageId);
+    if (existingPromise) {
+      // Use the existing promise instead of creating a new request
+      setIsLoading(true);
+      existingPromise
+        .then(emailData => {
+          setLoadedEmail(emailData);
+        })
+        .catch(err => {
+          console.error('Error fetching email content from existing promise:', err);
+          setError('Failed to load email content. Please try again.');
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+      return;
+    }
+
+    // If not in cache and no in-flight request, fetch it from the API
+    setIsLoading(true);
+    setError(null);
+    
+    // Create the fetch promise
+    const fetchPromise = (async () => {
+      // Use the appropriate API endpoint based on the service
+      const endpoint = service === 'gmail' 
+        ? `/api/gmail/getMessage?id=${messageId}`
+        : `/api/outlook/getMessage?id=${messageId}`;
+        
+      const response = await fetch(endpoint);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch email: ${response.status}`);
+      }
+      
+      const emailData = await response.json();
+      
+      // Store in cache for future use
+      emailCache.set(messageId, emailData);
+      
+      return emailData;
+    })();
+    
+    // Register this promise in our cache
+    emailCache.setFetchPromise(messageId, fetchPromise);
+    
+    // Handle the promise results
+    fetchPromise
+      .then(emailData => {
+        setLoadedEmail(emailData);
+      })
+      .catch(err => {
+        console.error('Error fetching email content:', err);
+        setError('Failed to load email content. Please try again.');
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+      
+  }, [messageId, service]); // Only re-run when messageId or service changes
+
+  if (isLoading) {
+    return (
+      <div className="loading-state">
+        <div className="spinner"></div>
+        <p>Loading email content...</p>
+        <style jsx>{`
+          .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #5f6368;
+          }
+          .spinner {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #1a73e8;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="error-state">
+        <p>{error}</p>
+        <style jsx>{`
+          .error-state {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #d93025;
+            background-color: #f8f9fa;
+            font-size: 16px;
+            padding: 16px;
+            text-align: center;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (!loadedEmail) {
     return (
       <div className="empty-state">
         <p>Select an email to view its contents</p>
@@ -46,16 +184,36 @@ export default function EmailViewer({ email }: EmailViewerProps) {
     }
   };
 
+  // Format the sender information to handle both string and object formats
+  const formatSender = (from: any): string => {
+    if (typeof from === 'string') {
+      return from;
+    } 
+    
+    if (Array.isArray(from)) {
+      return from.map(f => {
+        if (typeof f === 'string') return f;
+        return f.name ? `${f.name} <${f.email}>` : f.email;
+      }).join(', ');
+    }
+    
+    if (from && typeof from === 'object') {
+      return from.name ? `${from.name} <${from.email}>` : from.email || 'Unknown';
+    }
+    
+    return 'Unknown';
+  };
+
   const handleDownloadAttachment = async (attachmentId: string, fileName: string) => {
-    if (!email.id) return;
+    if (!loadedEmail.id) return;
     
     setIsDownloading({...isDownloading, [attachmentId]: true});
     
     try {
       // Use the appropriate API endpoint based on the email service
-      const endpoint = email.service === 'gmail' 
-        ? `/api/gmail/getAttachment?messageId=${email.id}&attachmentId=${attachmentId}`
-        : `/api/outlook/getAttachment?messageId=${email.id}&attachmentId=${attachmentId}`;
+      const endpoint = loadedEmail.service === 'gmail' 
+        ? `/api/gmail/getAttachment?messageId=${loadedEmail.id}&attachmentId=${attachmentId}`
+        : `/api/outlook/getAttachment?messageId=${loadedEmail.id}&attachmentId=${attachmentId}`;
       
       const response = await fetch(endpoint);
       
@@ -85,40 +243,40 @@ export default function EmailViewer({ email }: EmailViewerProps) {
   return (
     <div className="email-viewer">
       <div className="email-header">
-        <h2 className="email-subject">{email.subject || '(No subject)'}</h2>
+        <h2 className="email-subject">{loadedEmail.subject || '(No subject)'}</h2>
         
         <div className="email-meta">
           <div className="sender-info">
             <span className="from-label">From: </span>
-            <span className="from-value">{email.from || 'Unknown'}</span>
+            <span className="from-value">{formatSender(loadedEmail.from)}</span>
           </div>
           
           <div className="date-info">
-            {email.date && formatDate(email.date)}
+            {loadedEmail.date && formatDate(loadedEmail.date)}
           </div>
           
           <div className="service-info">
             <span className="service-label">Service: </span>
-            <span className={`service-value ${email.service}`}>
-              {email.service === 'gmail' ? 'Gmail' : 'Outlook'}
+            <span className={`service-value ${loadedEmail.service}`}>
+              {loadedEmail.service === 'gmail' ? 'Gmail' : 'Outlook'}
             </span>
           </div>
         </div>
       </div>
       
       <div className="email-body">
-        {email.contentType === 'text/html' ? (
-          <div dangerouslySetInnerHTML={{ __html: email.body }} />
+        {loadedEmail.contentType === 'text/html' ? (
+          <div dangerouslySetInnerHTML={{ __html: loadedEmail.body }} />
         ) : (
-          <pre>{email.body}</pre>
+          <pre>{loadedEmail.body}</pre>
         )}
       </div>
       
-      {email.attachments && email.attachments.length > 0 && (
+      {loadedEmail.attachments && loadedEmail.attachments.length > 0 && (
         <div className="attachments-section">
           <h3>Attachments</h3>
           <div className="attachment-list">
-            {email.attachments.map((attachment) => (
+            {loadedEmail.attachments.map((attachment) => (
               <div key={attachment.id} className="attachment-item">
                 <div className="attachment-info">
                   <div className="attachment-icon">📎</div>

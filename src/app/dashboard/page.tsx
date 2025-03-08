@@ -12,7 +12,6 @@ import './dashboard.css';
 export default function Dashboard() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEmail, setSelectedEmail] = useState<EmailContent | null>(null);
   const [selectedEmailId, setSelectedEmailId] = useState<string | undefined>(undefined);
   const [currentTab, setCurrentTab] = useState('inbox');
   const [watchStatus, setWatchStatus] = useState<string>('');
@@ -45,8 +44,7 @@ export default function Dashboard() {
     setLoading(true);
     
     // Clear current selection when switching services
-    setSelectedEmailId(undefined); // Changed from null to undefined
-    setSelectedEmail(null);
+    setSelectedEmailId(undefined);
     
     try {
       // Determine which API to call based on the selected service
@@ -82,39 +80,13 @@ export default function Dashboard() {
     }
   }, [service, router]);
 
-  const fetchEmailDetail = async (emailId: string) => {
-    if (!emailId) return;
-    
-    try {
-      // Determine which API to call based on the selected service
-      const endpoint = service === 'gmail'
-        ? `/api/gmail/getMessage?id=${emailId}`
-        : `/api/outlook/getMessage?id=${emailId}`;
-        
-      const response = await fetch(endpoint);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${service} email details`);
-      }
-      
-      const data = await response.json();
-      setSelectedEmail(data);
-    } catch (error) {
-      console.error(`Error fetching ${service} email detail:`, error);
-    }
-  };
-
   // Fetch emails when service changes
   useEffect(() => {
     fetchEmails();
   }, [fetchEmails, service]);
 
-  // Fetch email content when an email is selected
-  useEffect(() => {
-    if (selectedEmailId) {
-      fetchEmailDetail(selectedEmailId);
-    }
-  }, [selectedEmailId, service, fetchEmailDetail]);
+  // REMOVED: The useEffect that was calling fetchEmailDetail
+  // We're now letting the EmailViewer handle this with proper caching
 
   const handleSelectEmail = (emailId: string) => {
     setSelectedEmailId(emailId);
@@ -218,7 +190,7 @@ export default function Dashboard() {
               <EmailList 
                 emails={emails}
                 selectedEmailId={selectedEmailId}
-                onSelect={handleSelectEmail} // Changed from onEmailSelect to onSelect to match component props
+                onSelect={handleSelectEmail}
               />
             )}
           </div>
@@ -229,7 +201,11 @@ export default function Dashboard() {
                 ← Back to list
               </button>
             )}
-            <EmailViewer email={selectedEmail} />
+            <EmailViewer 
+              messageId={selectedEmailId} 
+              service={service}
+              email={null} // We don't need to pass email content anymore
+            />
           </div>
         </div>
       </div>

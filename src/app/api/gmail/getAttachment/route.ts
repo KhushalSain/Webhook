@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       }
     });
     
-  } catch (error: unknown) { // Changed from any to unknown
+  } catch (error: unknown) { // Change from any to unknown for better type safety
     console.error('Error fetching attachment:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
